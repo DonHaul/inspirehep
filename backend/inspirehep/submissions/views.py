@@ -211,7 +211,7 @@ class AuthorSubmissionsResource(BaseSubmissionsResource):
         if current_app.config.get("FEATURE_FLAG_ENABLE_SEND_TO_BACKOFFICE"):
             self.send_post_request_to_inspire_next(
                 current_app.config["INSPIRE_BACKOFFICE_URL"],
-                "/api/workflows/",
+                "/api/workflows/authors/",
                 payload_backoffice,
                 current_app.config["BACKOFFICE_BEARER_TOKEN"],
                 bearer_keyword="Token",
