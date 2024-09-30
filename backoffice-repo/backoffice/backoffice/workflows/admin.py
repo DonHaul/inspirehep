@@ -101,16 +101,12 @@ class WorkflowAdmin(BaseModelAdmin):
         "id",
         "workflow_type",
         "status",
-        "core",
-        "is_update",
         "_created_at",
         "_updated_at",
     )
     list_filter = [
         "workflow_type",
         "status",
-        "core",
-        "is_update",
         "_created_at",
         "_updated_at",
     ]

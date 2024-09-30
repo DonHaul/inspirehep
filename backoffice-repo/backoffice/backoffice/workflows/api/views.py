@@ -27,16 +27,14 @@ from backoffice.utils.pagination import OSStandardResultsSetPagination
 from backoffice.workflows import airflow_utils
 from backoffice.workflows.api import utils
 from backoffice.workflows.api.serializers import (
-    AuthorResolutionSerializer,
     DecisionSerializer,
-    WorkflowAuthorSerializer,
+    ResolutionSerializer,
     WorkflowDocumentSerializer,
     WorkflowSerializer,
     WorkflowTicketSerializer,
 )
 from backoffice.workflows.constants import (
     WORKFLOW_DAGS,
-    ResolutionDags,
     StatusChoices,
     WorkflowType,
 )
@@ -49,6 +47,8 @@ logger = logging.getLogger(__name__)
 class WorkflowViewSet(viewsets.ModelViewSet):
     queryset = Workflow.objects.all()
     serializer_class = WorkflowSerializer
+    resolution_serializer = ResolutionSerializer
+    resolution_dags = None
 
     def get_queryset(self):
         status = self.request.query_params.get("status")
@@ -59,6 +59,101 @@ class WorkflowViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         airflow_utils.delete_workflow_dag_runs(instance.id, instance.workflow_type)
         super().perform_destroy(instance)
+
+    def render_validation_error_response(self, validation_errors):
+        validation_errors_messages = [
+            {
+                "message": error.message,
+                "path": list(error.path),
+            }
+            for error in validation_errors
+        ]
+        return Response(
+            {"message": validation_errors_messages},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    @extend_schema(
+        summary="Partially Updates Workflow",
+        description="Updates specific fields of the workflow.",
+        examples=[
+            OpenApiExample(
+                "Status Update",
+                value={
+                    "status": StatusChoices.COMPLETED,
+                },
+            ),
+        ],
+    )
+    def partial_update(self, request, pk=None):
+        logger.info("Updating workflow with data: %s", request.data)
+        workflow_instance = get_object_or_404(Workflow, pk=pk)
+        serializer = self.serializer_class(
+            workflow_instance, data=request.data, partial=True
+        )
+
+        if serializer.is_valid(raise_exception=True):
+            serializer.save()
+            return Response(serializer.data)
+
+    @extend_schema(
+        summary="Accept or Reject Author",
+        description="Accepts or rejects an author, run associated dags.",
+        request=ResolutionSerializer,
+    )
+    @action(detail=True, methods=["post"])
+    def resolve(self, request, pk=None):
+        logger.info("Resolving data: %s", request.data)
+        serializer = self.resolution_serializer(data=request.data)
+        if serializer.is_valid(raise_exception=True):
+            extra_data = serializer.validated_data
+            logger.info(
+                "Trigger Airflow DAG: %s for %s",
+                self.resolution_dags[serializer.validated_data["value"]],
+                pk,
+            )
+            utils.add_decision(pk, request.user, serializer.validated_data["value"])
+
+            airflow_utils.trigger_airflow_dag(
+                self.resolution_dags[serializer.validated_data["value"]].label,
+                pk,
+                extra_data,
+            )
+            workflow_serializer = self.serializer_class(
+                get_object_or_404(Workflow, pk=pk)
+            )
+
+            return Response(workflow_serializer.data)
+
+    @extend_schema(
+        summary="Create/Update an Author",
+        description="Creates/Updates an author, launches the required airflow dags.",
+        request=serializer_class,
+    )
+    def create(self, request):
+        logger.info("Creating workflow with data: %s", request.data)
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid(raise_exception=True):
+            logger.info("Validating data against given schema: %s", request.data)
+            validation_errors = list(get_validation_errors(request.data.get("data")))
+            if validation_errors:
+                return self.render_validation_error_response(validation_errors)
+        logger.info("Data passed schema validation, creating workflow.")
+        workflow = Workflow.objects.create(
+            data=serializer.validated_data["data"],
+            workflow_type=serializer.validated_data["workflow_type"],
+        )
+        logger.info(
+            "Trigger Airflow DAG: %s for %s",
+            WORKFLOW_DAGS[workflow.workflow_type].initialize,
+            workflow.id,
+        )
+        airflow_utils.trigger_airflow_dag(
+            WORKFLOW_DAGS[workflow.workflow_type].initialize,
+            str(workflow.id),
+            workflow.data,
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class WorkflowTicketViewSet(viewsets.ModelViewSet):
@@ -93,114 +188,6 @@ class WorkflowTicketViewSet(viewsets.ModelViewSet):
         if serializer.is_valid(raise_exception=True):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-class DecisionViewSet(viewsets.ModelViewSet):
-    serializer_class = DecisionSerializer
-    queryset = Decision.objects.all()
-
-    def create(self, request, *args, **kwargs):
-        data = utils.add_decision(
-            request.data["workflow_id"], request.user, request.data["action"]
-        )
-        return Response(data, status=status.HTTP_201_CREATED)
-
-
-class AuthorWorkflowViewSet(viewsets.ViewSet):
-    serializer_class = WorkflowAuthorSerializer
-
-    def render_validation_error_response(self, validation_errors):
-        validation_errors_messages = [
-            {
-                "message": error.message,
-                "path": list(error.path),
-            }
-            for error in validation_errors
-        ]
-        return Response(
-            {"message": validation_errors_messages},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    @extend_schema(
-        summary="Create/Update an Author",
-        description="Creates/Updates an author, launches the required airflow dags.",
-        request=serializer_class,
-    )
-    def create(self, request):
-        logger.info("Creating workflow with data: %s", request.data)
-        serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid(raise_exception=True):
-            logger.info("Validating data against given schema: %s", request.data)
-            validation_errors = list(get_validation_errors(request.data.get("data")))
-            if validation_errors:
-                return self.render_validation_error_response(validation_errors)
-        logger.info("Data passed schema validation, creating workflow.")
-        workflow = Workflow.objects.create(
-            data=serializer.validated_data["data"],
-            workflow_type=serializer.validated_data["workflow_type"],
-        )
-        logger.info(
-            "Trigger Airflow DAG: %s for %s",
-            WORKFLOW_DAGS[workflow.workflow_type].initialize,
-            workflow.id,
-        )
-        airflow_utils.trigger_airflow_dag(
-            WORKFLOW_DAGS[workflow.workflow_type].initialize,
-            str(workflow.id),
-            workflow.data,
-        )
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    @extend_schema(
-        summary="Partially Updates Author",
-        description="Updates specific fields of the author.",
-        examples=[
-            OpenApiExample(
-                "Status Update",
-                value={
-                    "status": StatusChoices.COMPLETED,
-                },
-            ),
-        ],
-    )
-    def partial_update(self, request, pk=None):
-        logger.info("Updating workflow with data: %s", request.data)
-        workflow_instance = get_object_or_404(Workflow, pk=pk)
-        serializer = self.serializer_class(
-            workflow_instance, data=request.data, partial=True
-        )
-
-        if serializer.is_valid(raise_exception=True):
-            serializer.save()
-            return Response(serializer.data)
-
-    @extend_schema(
-        summary="Accept or Reject Author",
-        description="Accepts or rejects an author, run associated dags.",
-        request=AuthorResolutionSerializer,
-    )
-    @action(detail=True, methods=["post"])
-    def resolve(self, request, pk=None):
-        logger.info("Resolving data: %s", request.data)
-        serializer = AuthorResolutionSerializer(data=request.data)
-        if serializer.is_valid(raise_exception=True):
-            extra_data = serializer.validated_data
-            logger.info(
-                "Trigger Airflow DAG: %s for %s",
-                ResolutionDags[serializer.validated_data["value"]],
-                pk,
-            )
-            utils.add_decision(pk, request.user, serializer.validated_data["value"])
-
-            airflow_utils.trigger_airflow_dag(
-                ResolutionDags[serializer.validated_data["value"]].label, pk, extra_data
-            )
-            workflow_serializer = self.serializer_class(
-                get_object_or_404(Workflow, pk=pk)
-            )
-
-            return Response(workflow_serializer.data)
 
     @extend_schema(
         summary="Restart an Author Workflow",
@@ -329,6 +316,17 @@ class AuthorWorkflowViewSet(viewsets.ViewSet):
         )
 
 
+class DecisionViewSet(viewsets.ModelViewSet):
+    serializer_class = DecisionSerializer
+    queryset = Decision.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        data = utils.add_decision(
+            request.data["workflow_id"], request.user, request.data["action"]
+        )
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
 @extend_schema_view(
     list=extend_schema(
         summary="Search with opensearch",
@@ -373,7 +371,7 @@ class WorkflowDocumentView(BaseDocumentViewSet):
         self.search = self.search.extra(track_total_hits=True)
 
     document = WorkflowDocument
-    serializer_class = WorkflowSerializer
+    serializer_class = WorkflowDocumentSerializer
     pagination_class = OSStandardResultsSetPagination
     filter_backends = [
         DefaultOrderingFilterBackend,
@@ -382,18 +380,11 @@ class WorkflowDocumentView(BaseDocumentViewSet):
         FilteringFilterBackend,
         OrderingFilterBackend,
     ]
-    search_fields = {
-        "data.ids.value",
-        "data.ids.schema",
-        "data.name.value",
-        "data.name.preferred_name",
-        "data.email_addresses.value",
-    }
+    search_fields = {"data.ids.value", "data.ids.schema"}
 
     filter_fields = {
         "status": "status",
         "workflow_type": "workflow_type",
-        "is_update": "is_update",
     }
 
     ordering_fields = {"_updated_at": "_updated_at", "_score": "_score"}
@@ -425,6 +416,3 @@ class WorkflowDocumentView(BaseDocumentViewSet):
             "enabled": True,
         },
     }
-
-    def get_serializer_class(self):
-        return WorkflowDocumentSerializer
