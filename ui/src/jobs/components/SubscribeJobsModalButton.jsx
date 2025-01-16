@@ -57,7 +57,7 @@ export default class SubscribeJobsModalButton extends Component {
       setTimeout(() => {
         this.setState({ isModalVisible: false });
       }, MODAL_AUTO_CLOSE_TIMEOUT_AFTER_SUBMISSION);
-    } catch (error) {
+    } catch {
       this.setState({ hasError: true });
     }
   }

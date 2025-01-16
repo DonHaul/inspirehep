@@ -10,7 +10,7 @@ describe('PDGKeywords', () => {
       {
         value: 'Q007TP',
         description:
-          // eslint-disable-next-line no-template-curly-in-string
+
           '\\Gamma($  ${{\\mathit W}^{+}}$   $\\rightarrow$   ${{\\mathit \\ell}^{+}}{{\\mathit \\nu}})/\\Gamma_{\\text{total}}',
       },
       {

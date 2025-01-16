@@ -39,7 +39,7 @@ export default function cleanupFormData(data) {
     }
 
     if (Array.isArray(result)) {
-      return result.push(value); // eslint-disable-line consistent-return
+      return result.push(value);
     }
 
     result[key] = value;

@@ -1,4 +1,4 @@
-/* eslint-disable react/button-has-type, react/prop-types */
+
 import React, { useCallback } from 'react';
 import { mount } from 'enzyme';
 

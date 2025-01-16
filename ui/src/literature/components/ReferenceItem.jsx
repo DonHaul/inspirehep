@@ -1,4 +1,4 @@
-/* eslint-disable camelcase */
+
 import React, { Component, Fragment } from 'react';
 import PropTypes from 'prop-types';
 import { Map } from 'immutable';

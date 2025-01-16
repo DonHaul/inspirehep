@@ -45,7 +45,7 @@ class CiteAllAction extends Component {
         `INSPIRE-CiteAll.${CITE_FILE_FORMAT[key].extension}`,
         CITE_FILE_FORMAT[key].mimetype
       );
-    } catch (error) {
+    } catch {
       this.setState({ loading: false });
     }
   }

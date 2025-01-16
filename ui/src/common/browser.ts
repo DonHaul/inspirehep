@@ -14,7 +14,7 @@ class CurrentBrowser {
 
   // adapted from https://developer.mozilla.org/en-US/docs/Web/API/Window/navigator
   // use a library (npmjs.com/package/bowser) if more info from userAgent is needed (like OS, version etc.)
-  // eslint-disable-next-line class-methods-use-this
+
   getName(): BrowserName {
     const { userAgent } = navigator;
     if (userAgent.indexOf('Firefox') > -1) {

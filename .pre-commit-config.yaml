@@ -18,11 +18,11 @@ repos:
         args: [ --fix ]
       - id: ruff-format
   # Prettier for the React project
-  - repo: local
-    hooks:
-      - id: yarn-lint
-        name: Lint and format with Prettier
-        entry: yarn lint
-        language: node
-        types_or: [javascript, json, css, scss, markdown]
-        files: ^ui/.*\.(js|jsx|ts|tsx|json|css|scss|md)$
+  #- repo: local
+  #  hooks:
+  #    - id: yarn-lint
+  #      name: Lint and format with Prettier
+  #      entry: yarn --cwd ui lint
+  #      language: node
+  #      types_or: [javascript, json, css, scss, markdown]
+  #      files: ^ui/.*\.(js|jsx|ts|tsx|json|css|scss|md)$

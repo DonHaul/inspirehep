@@ -3,7 +3,7 @@ import { act } from 'react-dom/test-utils';
 import { mount } from 'enzyme';
 import usePrevious from '../usePrevious';
 
-// eslint-disable-next-line react/prop-types
+
 function TestPrevious({ value }) {
   const previousValue = usePrevious(value);
   return (

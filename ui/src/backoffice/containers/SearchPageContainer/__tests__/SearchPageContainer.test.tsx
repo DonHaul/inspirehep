@@ -7,10 +7,10 @@ import { fromJS } from 'immutable';
 import { getStoreWithState } from '../../../../fixtures/store';
 import SearchPageContainer from '../SearchPageContainer';
 import { BACKOFFICE_SEARCH } from '../../../../common/routes';
-import { BACKOFFICE_SEARCH_REQUEST } from '../../../../actions/actionTypes';
-import { SEARCH_REQUEST } from '../../../../actions/actionTypes';
+import { BACKOFFICE_SEARCH_REQUEST , SEARCH_REQUEST } from '../../../../actions/actionTypes';
+
 describe('SearchPageContainer', () => {
-  let store = getStoreWithState({
+  const store = getStoreWithState({
     backoffice: fromJS({
       loading: false,
       loggedIn: true,

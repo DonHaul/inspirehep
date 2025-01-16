@@ -10,7 +10,7 @@ class JsonDiff extends Component {
     const delta = diff(first, second);
     return (
       <div
-        /* eslint-disable-next-line react/no-danger */
+
         dangerouslySetInnerHTML={{
           __html: formatters.html.format(delta, second),
         }}

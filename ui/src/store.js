@@ -2,9 +2,9 @@ import { applyMiddleware, createStore as createReduxStore } from 'redux';
 import thunk from 'redux-thunk';
 import { createBrowserHistory } from 'history'
 import { routerMiddleware } from 'connected-react-router';
-/* eslint-disable import/no-extraneous-dependencies */
+
 import { createLogger } from 'redux-logger';
-/* eslint-disable import/no-extraneous-dependencies */
+
 import { composeWithDevTools } from 'redux-devtools-extension';
 
 import createRootReducer from './reducers';
@@ -23,7 +23,7 @@ import logoutUserOn401 from './middlewares/logoutUserOn401';
 
 export const thunkMiddleware = thunk.withExtraArgument(http);
 
-export const history = createBrowserHistory(); 
+export const history = createBrowserHistory();
 const connectedRouterMiddleware = routerMiddleware(history);
 
 const reducersToPersist = ['ui', 'user'];

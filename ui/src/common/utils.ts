@@ -92,7 +92,7 @@ export function isEmptyObjectShallow(object: { [key: string]: any }) {
 
 export function mergeWithConcattingArrays(destObject: any, ...sources: any) {
   const clonedDestObject = cloneDeep(destObject);
-  // eslint-disable-next-line consistent-return
+
   return mergeWith(clonedDestObject, ...sources, (objValue: any, srcValue: any) => {
     if (Array.isArray(objValue) && Array.isArray(srcValue)) {
       return objValue.concat(srcValue);
