@@ -99,7 +99,7 @@ function AssignAction({
   ];
 
   return (
-    <UserAction>
+    <UserAction data-test-id="assign-action">
       <DropdownMenu
         disabled={disabled}
         items={menuItems}

@@ -1,8 +1,10 @@
 import React from 'react';
-import { shallow } from 'enzyme';
+import { render ,fireEvent} from '@testing-library/react';
 import { Set } from 'immutable';
 
+import { Provider } from 'react-redux';
 import AssignDrawer from '../AssignDrawer';
+import { getStore } from '../../../../fixtures/store';
 
 jest.mock('react-router-dom', () => ({
   useParams: jest.fn().mockImplementation(() => ({
@@ -17,15 +19,17 @@ describe('AssignDrawer', () => {
     const onAssign = jest.fn();
     const selectedPapers = Set([1, 2, 3]);
 
-    const wrapper = shallow(
+    const { asFragment } = render(
+      <Provider store={getStore()}>
       <AssignDrawer
         visible={visible}
         onDrawerClose={onDrawerClose}
         onAssign={onAssign}
         selectedPapers={selectedPapers}
       />
+      </Provider>
     );
-    expect(wrapper).toMatchSnapshot();
+    expect(asFragment()).toMatchSnapshot();
   });
 
   it('calls onAssign on assign button click', () => {
@@ -34,27 +38,22 @@ describe('AssignDrawer', () => {
     const onAssign = jest.fn();
     const selectedPapers = Set([1, 2, 3]);
 
-    const wrapper = shallow(
-      <AssignDrawer
-        visible={visible}
-        onDrawerClose={onDrawerClose}
-        onAssign={onAssign}
-        selectedPapers={selectedPapers}
-      />
+    const { getByTestId } = render(
+      <Provider store={getStore()}>
+        <AssignDrawer
+          visible={visible}
+          onDrawerClose={onDrawerClose}
+          onAssign={onAssign}
+          selectedPapers={selectedPapers}
+        />
+      </Provider>
     );
-    expect(wrapper.find('[data-test-id="assign-button"]')).toHaveProp({
-      disabled: true,
-    });
+    expect(getByTestId('assign-button')).toBeDisabled();
 
-    wrapper
-      .find('[data-test-id="author-radio-group"]')
-      .simulate('change', { target: { value: 321 } });
-    wrapper.update();
-    expect(wrapper.find('[data-test-id="assign-button"]')).toHaveProp({
-      disabled: false,
-    });
+    fireEvent.change(getByTestId('author-radio-group'), { target: { value: "321" } });
+    expect(getByTestId('assign-button')).toBeEnabled();
 
-    wrapper.find('[data-test-id="assign-button"]').simulate('click');
+    getByTestId('assign-button').simulate('click');
     expect(onAssign).toHaveBeenCalledWith({ from: 123, to: 321 });
   });
 });
