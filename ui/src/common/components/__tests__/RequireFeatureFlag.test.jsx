@@ -1,5 +1,4 @@
-import React from 'react';
-import { shallow } from 'enzyme';
+import { render } from '@testing-library/react';
 
 import RequireFeatureFlag from '../RequireFeatureFlag';
 
@@ -10,25 +9,25 @@ describe('RequireFeatureFlag', () => {
 
   it('renders null if flag is false', () => {
     global.CONFIG = { A_WIP_FEATURE: false };
-    const wrapper = shallow(
+    const { container } = render(
       <RequireFeatureFlag flag="A_WIP_FEATURE">
         <div>a WIP Feature</div>
       </RequireFeatureFlag>
     );
-    expect(wrapper).toMatchSnapshot();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renders null if flag is not set', () => {
-    const wrapper = shallow(
+    const { container } = render(
       <RequireFeatureFlag flag="A_WIP_FEATURE">
         <div>a WIP Feature</div>
       </RequireFeatureFlag>
     );
-    expect(wrapper).toMatchSnapshot();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renders whenDisabled if flag is not set and whenDisabled is', () => {
-    const wrapper = shallow(
+    const { getByText } = render(
       <RequireFeatureFlag
         flag="A_WIP_FEATURE"
         whenDisabled="Almost there, this feature is WIP"
@@ -36,16 +35,16 @@ describe('RequireFeatureFlag', () => {
         <div>a WIP Feature</div>
       </RequireFeatureFlag>
     );
-    expect(wrapper).toMatchSnapshot();
+    expect(getByText("Almost there, this feature is WIP")).toMatchSnapshot();
   });
 
   it('renders children if flag is set', () => {
     global.CONFIG = { A_WIP_FEATURE: true };
-    const wrapper = shallow(
+    const { getByText } = render(
       <RequireFeatureFlag flag="A_WIP_FEATURE">
         <div>a WIP Feature</div>
       </RequireFeatureFlag>
     );
-    expect(wrapper).toMatchSnapshot();
+    expect(getByText("a WIP Feature")).toMatchSnapshot();
   });
 });

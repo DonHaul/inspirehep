@@ -1,13 +1,3 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`SafeSwitch renders childrens and redirect to errors 1`] = `
-<Switch>
-  <Route
-    component={[Function]}
-    path="/foo"
-  />
-  <Redirect
-    to="/errors"
-  />
-</Switch>
-`;
+exports[`SafeSwitch renders childrens and redirect to errors 1`] = `<DocumentFragment />`;

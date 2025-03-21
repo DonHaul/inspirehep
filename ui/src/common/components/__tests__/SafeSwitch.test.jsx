@@ -1,17 +1,18 @@
-import React from 'react';
-import { shallow } from 'enzyme';
+import { render } from '@testing-library/react';
 import { Route } from 'react-router-dom';
-
+import { MemoryRouter } from 'react-router-dom';
 import SafeSwitch from '../SafeSwitch';
 
 describe('SafeSwitch', () => {
   it('renders childrens and redirect to errors', () => {
     const Foo = () => <div>Foo Component</div>;
-    const wrapper = shallow(
+    const { asFragment } = render(
+      <MemoryRouter>
       <SafeSwitch>
         <Route path="/foo" component={Foo} />
       </SafeSwitch>
+      </MemoryRouter>
     );
-    expect(wrapper).toMatchSnapshot();
+    expect(asFragment()).toMatchSnapshot();
   });
 });
