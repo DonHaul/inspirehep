@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import logging
 
+import asyncpg  # efficient async Postgres driver
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowException
 from airflow.models.param import Param
@@ -75,6 +76,92 @@ class DBFlagSensor(BaseSensorOperator):
         return
 
 
+class PostgresNotifyTrigger(BaseTrigger):
+    def __init__(self, dsn: str, channel: str):
+        super().__init__()
+        self.dsn = dsn
+        self.channel = channel
+
+    def serialize(self):
+        return (
+            "literature.literature_create_init.PostgresNotifyTrigger",
+            {
+                "dsn": self.dsn,
+                "channel": self.channel,
+            },
+        )
+
+    async def run2(self):
+        print("Starting Postgres Notify Listener...")
+
+        # Connect to the PostgreSQL database
+        conn = await asyncpg.connect(
+            user="postgres",
+            password="postgres",
+            database="backoffice",
+            host="host.docker.internal",  # Use 'db' if running in Docker
+        )
+        # yield TriggerEvent({"status": "success", "payload": "no"})
+
+        async def handle_notify(connection, pid, channel, payload):
+            print(f"Got NOTIFY: channel={channel}, pid={pid}, payload={payload}")
+            yield TriggerEvent({"status": "success", "payload": "maybe"})
+
+        # yield TriggerEvent({"status": "success", "payload": "www"})
+
+        # Add listener to a channel
+        await conn.add_listener("my_channel", handle_notify)
+        print("Listening on 'my_channel'...")
+
+        try:
+            while True:
+                await asyncio.sleep(1)  # Keep the loop alive
+        finally:
+            await conn.close()
+            yield TriggerEvent({"status": "success", "payload": "finito"})
+
+    async def run(self):
+        try:
+            conn = await asyncpg.connect(self.dsn)
+            await conn.add_listener(self.channel, self._notify_handler)
+
+            # Use an event to wait for the signal
+            self._event = asyncio.Event()
+            self._message = None
+
+            await self._event.wait()
+            await conn.remove_listener(self.channel, self._notify_handler)
+            await conn.close()
+
+            yield TriggerEvent({"status": "success", "payload": self._message})
+
+        except Exception as e:
+            yield TriggerEvent({"status": "error", "message": str(e)})
+
+    def _notify_handler(self, connection, pid, channel, payload):
+        self._message = payload
+        self._event.set()
+
+
+class PostgresNotifySensor(BaseSensorOperator):
+    def __init__(self, dsn: str, channel: str, **kwargs):
+        super().__init__(**kwargs)
+        self.dsn = dsn
+        self.channel = channel
+
+    def execute(self, context: Context):
+        print("Starting PostgresNotifySensor execution...")
+        self.defer(
+            trigger=PostgresNotifyTrigger(dsn=self.dsn, channel=self.channel),
+            method_name="execute_complete",
+        )
+
+    def execute_complete(self, context: Context, event):
+        if not event or event.get("status") != "success":
+            raise AirflowException(f"PostgresNotifySensor failed: {event}")
+        self.log.info(f"Received Postgres notification: {event['payload']}")
+
+
 @dag(
     params={
         "workflow_id": Param(type="string", default=""),
@@ -104,6 +191,11 @@ def literature_create_initialization_dag():
     def set_workflow_status_to_running(**context):
         print("Setting workflow status to running")
 
+    wow2 = PostgresNotifySensor(
+        task_id="wow2",
+        dsn="postgresql://postgres:postgres@db:5432/backoffice",
+        channel="task_completed",
+    )
     wow = DBFlagSensor(task_id="wow")
 
     @task
@@ -123,6 +215,7 @@ def literature_create_initialization_dag():
     (
         set_workflow_status_to_running()
         >> undeferred()
+        >> wow2
         >> wow
         >> check_is_running()
         >> run()
