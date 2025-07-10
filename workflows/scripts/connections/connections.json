@@ -78,5 +78,15 @@
     "port": null,
     "schema": "",
     "extra": ""
+  },
+    "backoffice_db_connection": {
+    "conn_type": "postgres",
+    "description": "Used for cds rdm harvesting",
+    "login": "postgres",
+    "password": "postgres",
+    "host": "db",
+    "port": 5432,
+    "schema": "backoffice",
+    "extra": ""
   }
 }
