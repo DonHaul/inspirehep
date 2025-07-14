@@ -47,7 +47,8 @@ airflow-setup:
 	docker compose exec airflow-api-server /entrypoint airflow variables import ./scripts/variables/variables.json
 	echo "\033[31mCHANGE inspire_token in Admin->Variables\033[0m"
 	echo "Workflows initialized"
-
+	docker compose exec s3 mc alias set airflow http://s3:9000 airflow airflow-inspire
+	docker compose exec s3 mc mb airflow/data-store
 
 stop:
 	docker compose down
