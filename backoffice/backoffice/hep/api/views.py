@@ -87,7 +87,7 @@ class HepWorkflowViewSet(BaseWorkflowViewSet):
         workflow = serializer.save()
         logger.info(
             "Trigger Airflow DAG: %s for %s",
-            WORKFLOW_DAGS[workflow.workflow_type].initialize,
+            WORKFLOW_DAGS[workflow.workflow_type],
             workflow.id,
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
