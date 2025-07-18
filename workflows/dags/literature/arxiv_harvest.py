@@ -5,6 +5,7 @@ from airflow.decorators import dag, task, task_group
 from airflow.exceptions import AirflowException
 from airflow.hooks.base import BaseHook
 from airflow.models.param import Param
+from hooks.backoffice.workflow_management_hook import HEP, WorkflowManagementHook
 from include.utils.alerts import task_failure_alert
 from sickle import Sickle, oaiexceptions
 
@@ -57,6 +58,8 @@ def arxiv_harvest_dag():
     2. build_records: converts the raw XML records into json using the ArxivParser.
     3. load_record: ???
     """
+
+    workflow_management_hook = WorkflowManagementHook(HEP)
 
     conn = BaseHook.get_connection("arxiv_oaipmh_connection")
     sickle = Sickle(conn.host)
@@ -133,12 +136,34 @@ def arxiv_harvest_dag():
 
             Args: new_records list(dict): The records to load.
             """
+            failed_records = []
+
             for record in new_records:
-                logger.info(f"Loading record: {record.get('control_number')}")
+                # Trigger the workflow for each record
+                workflow_data = {
+                    "data": record,
+                    "status": "new",
+                    "acquisition_source": {
+                        "source": "arxiv",
+                        "source_id": record.get("control_number"),
+                    },
+                }
+                try:
+                    logger.info(f"Loading record: {record.get('control_number')}")
+                    workflow_management_hook.post_workflow(
+                        workflow_data=workflow_data,
+                    )
+                except Exception:
+                    logger.error(
+                        f"Failed to load record: {record.get('control_number')}"
+                    )
+                    failed_records.append(record)
+
+                return failed_records
 
         records = fetch_records(set)
         records = build_records(records)
-        load_records(records["parsed_records"])
+        records["failed_records"] += load_records(records["parsed_records"])
 
         return records["failed_records"]
 
