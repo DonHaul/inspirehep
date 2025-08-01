@@ -5,6 +5,7 @@ from airflow.decorators import dag, task
 from airflow.models import Variable
 from airflow.models.param import Param
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.sdk import BaseNotifier
 from author.shared_tasks import set_submission_number
 from hooks.backoffice.workflow_management_hook import AUTHORS, WorkflowManagementHook
 from hooks.backoffice.workflow_ticket_management_hook import (
@@ -14,10 +15,63 @@ from hooks.inspirehep.inspire_http_hook import (
     AUTHOR_SUBMIT_FUNCTIONAL_CATEGORY,
     InspireHttpHook,
 )
-from include.utils.alerts import dag_failure_callback
+
+# from include.utils.alerts import dag_failure_callback
 from include.utils.tickets import get_ticket_by_type
 
 logger = logging.getLogger(__name__)
+
+
+def set_workflow_status_to_error(collection, workflow_id) -> None:
+    """
+    Sets the workflow status to error.
+
+    Args:
+        workflow_id (str): The identifier for the workflow.
+    """
+    logger.info("Setting workflow status to error")
+    response = WorkflowManagementHook(collection=collection).set_workflow_status(
+        status_name="error", workflow_id=workflow_id
+    )
+    try:
+        response.raise_for_status()
+    except Exception as e:
+        logger.error(f"Error setting workflow status to error: {e}")
+        raise e
+    print("WWWWWWWWWWWWWWSetting workflow status to error")
+
+
+def dag_failure_callback(context):
+    print(context)
+    # try:
+    #     task_failure_alert(context)
+    # except Exception as e:
+    #     logger.error(f"Error in sending alert: {e}")
+    set_workflow_status_to_error(context)
+
+
+def make_notify_failure(collection):
+    def dag_failure_callback(context):
+        print(context)
+        # try:
+        #     task_failure_alert(context)
+        # except Exception as e:
+        #     logger.error(f"Error in sending alert: {e}")
+        set_workflow_status_to_error(collection, context["run_id"])
+
+    return dag_failure_callback
+
+
+class MyNotifier(BaseNotifier):
+    template_fields = ("message",)
+
+    def __init__(self, message):
+        self.message = message
+
+    def notify(self, context):
+        # Send notification here, below is an example
+        title = "lol"
+        print(title)
 
 
 @dag(
@@ -29,7 +83,7 @@ logger = logging.getLogger(__name__)
     start_date=datetime.datetime(2024, 5, 5),
     schedule=None,
     catchup=False,
-    on_failure_callback=dag_failure_callback,
+    on_failure_callback=make_notify_failure(collection=AUTHORS),
     tags=[AUTHORS],
 )
 def author_create_initialization_dag():

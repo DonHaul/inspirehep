@@ -37,10 +37,13 @@ def task_failure_alert(context):
 
 def dag_failure_callback(context):
     """Callback function for DAG failure."""
+    logger.error("WWWWWWWWWWWWWW")
+    print("WWWWWWWWWWWWWW")
     try:
         task_failure_alert(context)
     except Exception as e:
         logger.error(f"Error in sending alert: {e}")
 
     # TODO: what if callback fails? Data in backoffice not up to date!
+    print("WWWWWWWWWWWWWWWSETTING WORKFLOW STATUS TO ERROR")
     set_workflow_status_to_error(context)

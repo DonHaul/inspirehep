@@ -35,6 +35,7 @@ def set_workflow_status_to_error(context: dict) -> None:
     Args:
         workflow_id (str): The identifier for the workflow.
     """
+    print("WWWWWWWWWWWWWWSetting workflow status to error")
     logger.info("Setting workflow status to error")
     response = WorkflowManagementHook(
         collection=context["params"]["collection"]
@@ -46,3 +47,4 @@ def set_workflow_status_to_error(context: dict) -> None:
     except Exception as e:
         logger.error(f"Error setting workflow status to error: {e}")
         raise e
+    print("WWWWWWWWWWWWWWSetting workflow status to error")
