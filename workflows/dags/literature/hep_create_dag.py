@@ -127,6 +127,36 @@ def hep_create_dag():
             return "direct_update"
         return "direct_create"
 
+    @task
+    def populate_arxiv_document(**context):
+        pass
+        # workflow_data = read_object(s3_hook, context["params"]["workflow_id"])
+        # arxiv_id = workflow_data["data"]["arxiv_eprints"][0]["value"]
+
+        # arxiv_pdf_urls = Variable.get("ARXIV_PDF_URLS", deserialize_json=True)
+
+        # for arxiv_url in arxiv_pdf_urls:
+        #     url = arxiv_url.format(arxiv_id=arxiv_id)
+        #     is_valid_pdf_link = is_pdf_link(url)
+        #     if is_valid_pdf_link:
+        #         break
+        #     try:
+        #         if NO_PDF_ON_ARXIV in requests.get(url).content:
+        #             obj.log.info('No PDF is available for %s', arxiv_id)
+        #             return
+        #     except requests.exceptions.RequestException:
+        #         raise DownloadError("Error accessing url {url}".
+
+        #     if not is_valid_pdf_link:
+        #         raise DownloadError("{url} is not serving a PDF file
+
+        #     filename = secure_filename('{0}.pdf'.format(arxiv_id))
+        #     obj.data['documents'] = [
+        #         document for document in obj.data.get('documents', ())
+        #         if document.get('key') != filename
+        # ]
+        #     return workflow_data
+
     @task(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
     def direct_update(**context):
         print("direct update")
@@ -155,6 +185,7 @@ def hep_create_dag():
         >> set_workflow_status_to_running()
         >> check_for_blocking_workflows()
         >> check_persistent_identifier_match()
+        >> populate_arxiv_document()
         >> [direct_update_task, await_decision_exact_match_task]
     )
 
