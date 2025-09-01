@@ -1,16 +1,17 @@
 import datetime
 import logging
-import random
 
 from airflow.decorators import dag, task
 from airflow.models.param import Param
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.utils.edgemodifier import Label
 from airflow.utils.trigger_rule import TriggerRule
 from hooks.backoffice.workflow_management_hook import (
     HEP,
     RUNNING_STATUSES,
     WorkflowManagementHook,
 )
+from hooks.inspirehep.inspire_http_hook import InspireHttpHook
 from include.utils.alerts import FailedDagNotifierSetError
 from include.utils.s3 import read_object, write_object
 from include.utils.workflows import get_decision
@@ -43,6 +44,7 @@ def hep_create_dag():
     """
 
     workflow_management_hook = WorkflowManagementHook(HEP)
+    inspire_http_hook = InspireHttpHook()
 
     @task
     def get_workflow_data(**context):
@@ -83,12 +85,25 @@ def hep_create_dag():
         )
         return False
 
-    @task.branch
-    def check_persistent_identifier_match(**context):
-        # to be replaced with actual matching logic
-        is_persisten_identifier_match = random.choice([True, False])
+    @task
+    def get_exact_matches(**context):
+        workflow_data = read_object(s3_hook, context["params"]["workflow_id"])
 
-        if is_persisten_identifier_match:
+        response = inspire_http_hook.call_api(
+            endpoint="api/matcher/exact-match",
+            method="GET",
+            data={"data": workflow_data},
+        )
+        response.raise_for_status()
+
+        return response.json()["matched_ids"]
+
+    @task.branch
+    def check_for_exact_matches(matches, **context):
+        print(f"Exact matches: {matches}")
+        if not matches:
+            return "get_fuzzy_matches"
+        elif len(matches) == 1:
             return "direct_update"
 
         return "await_decision_exact_match"
@@ -115,7 +130,7 @@ def hep_create_dag():
         return "set_workflow_status_to_matching"
 
     @task.branch
-    def check_is_update(**context):
+    def check_decision_exact_match(**context):
         """
         Check if the workflow is an update or create.
         """
@@ -125,7 +140,11 @@ def hep_create_dag():
         decision = get_decision(workflow_data.get("decisions"), "exact_match")
         if decision and decision.get("value"):
             return "direct_update"
-        return "direct_create"
+        return "get_fuzzy_matches"
+
+    @task(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
+    def get_fuzzy_matches(**context):
+        print("TO IMPLEMENT")
 
     @task(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
     def direct_update(**context):
@@ -149,13 +168,32 @@ def hep_create_dag():
     direct_create_task = direct_create()
     set_workflow_status_to_matching_task = set_workflow_status_to_matching()
     set_workflow_status_to_running_task = set_workflow_status_to_running()
+    exact_matches = get_exact_matches()
+    get_fuzzy_matches_task = get_fuzzy_matches()
+    set_workflow_status_to_completed_task = set_workflow_status_to_completed()
+    check_for_exact_matches_task = check_for_exact_matches(exact_matches)
 
     (
         get_workflow_data()
         >> set_workflow_status_to_running()
         >> check_for_blocking_workflows()
-        >> check_persistent_identifier_match()
-        >> [direct_update_task, await_decision_exact_match_task]
+        >> exact_matches
+        >> check_for_exact_matches_task
+        >> [direct_update_task, await_decision_exact_match_task, get_fuzzy_matches_task]
+    )
+
+    check_for_exact_matches_task >> Label("No Exact Matches") >> get_fuzzy_matches_task
+    check_for_exact_matches_task >> Label("1 Exact Match") >> direct_update_task
+    (
+        check_for_exact_matches_task
+        >> Label("Multiple Exact Matches")
+        >> await_decision_exact_match_task
+    )
+
+    (
+        get_fuzzy_matches_task
+        >> direct_create_task
+        >> set_workflow_status_to_completed_task
     )
 
     await_decision_exact_match_task >> [
@@ -165,10 +203,10 @@ def hep_create_dag():
 
     (
         set_workflow_status_to_running_task
-        >> check_is_update()
-        >> [direct_update_task, direct_create_task]
-        >> set_workflow_status_to_completed()
+        >> check_decision_exact_match()
+        >> [direct_update_task, get_fuzzy_matches_task]
     )
+    direct_update_task >> set_workflow_status_to_completed_task
 
 
 hep_create_dag()
