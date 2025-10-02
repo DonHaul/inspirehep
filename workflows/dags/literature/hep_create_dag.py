@@ -7,10 +7,10 @@ from airflow.decorators import dag, task_group
 from airflow.exceptions import AirflowException
 from airflow.hooks.base import BaseHook
 from airflow.models.param import Param
-from airflow.models.variable import Variable
+from airflow.models.variable import Variable as VariableDeprecated
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.sdk import task
+from airflow.sdk import Variable, task
 from airflow.utils.edgemodifier import Label
 from airflow.utils.trigger_rule import TriggerRule
 from hooks.backoffice.workflow_management_hook import (
@@ -34,6 +34,10 @@ from include.utils.s3 import read_object, write_object
 from inspire_utils.dedupers import dedupe_list
 from inspire_utils.helpers import maybe_int
 from inspire_utils.record import get_value
+from invenio_classifier import (
+    get_keywords_from_text,
+)
+from invenio_classifier.errors import ClassifierException
 from literature.exact_match_tasks import (
     await_decision_exact_match,
     check_decision_exact_match,
@@ -55,7 +59,7 @@ from werkzeug.utils import secure_filename
 logger = logging.getLogger(__name__)
 s3_hook = S3Hook(aws_conn_id="s3_conn")
 s3_conn = BaseHook.get_connection("s3_conn")
-bucket_name = Variable.get("s3_bucket_name")
+bucket_name = VariableDeprecated.get("s3_bucket_name")
 
 
 @dag(
@@ -430,6 +434,85 @@ def hep_create_dag():
                 overwrite=True,
             )
 
+        @task
+        def classify_paper(
+            taxonomy=None,
+            rebuild_cache=False,
+            no_cache=False,
+            output_limit=20,
+            spires=False,
+            match_mode="full",
+            with_author_keywords=False,
+            extract_acronyms=False,
+            only_core_tags=False,
+            fast_mode=False,
+            **context,
+        ):
+            # only_core_tags=False,
+            # spires=True,
+            # with_author_keywords=True
+
+            workflow_data = read_object(s3_hook, bucket_name, s3_workflow_id)
+
+            params = dict(
+                taxonomy_name=taxonomy or Variable.get("HEP_ONTOLOGY_FILE"),
+                output_mode="dict",
+                output_limit=output_limit,
+                spires=spires,
+                match_mode=match_mode,
+                no_cache=no_cache,
+                with_author_keywords=with_author_keywords,
+                rebuild_cache=rebuild_cache,
+                only_core_tags=only_core_tags,
+                extract_acronyms=extract_acronyms,
+            )
+
+            try:
+                data = get_value(workflow_data.data, "titles.title", [])
+                data.extend(get_value(workflow_data.data, "titles.subtitle", []))
+                data.extend(get_value(workflow_data.data, "abstracts.value", []))
+                data.extend(get_value(workflow_data.data, "keywords.value", []))
+                if not data:
+                    logger.error("No classification done due to missing data.")
+                    data_result = None
+                else:
+                    data_result = get_keywords_from_text(data, **params)
+                    if data_result:
+                        data_result["complete_output"] = (
+                            workflows.clean_instances_from_data(
+                                data_result.get("complete_output", {})
+                            )
+                        )
+            except ClassifierException as e:
+                logger.exception(e)
+                data_result = None
+
+        # with get_document_in_workflow(obj) as tmp_document:
+        #     try:
+        #         if tmp_document:
+        #             result = get_keywords_from_local_file(tmp_document, **params)
+        #             fulltext_used = True
+        #             if result:
+        #                 result["complete_output"] = clean_instances_from_data(
+        #                     result.get("complete_output", {})
+        #                 )
+        #         else:
+        #             result = data_result
+        #             fulltext_used = False
+        #     except ClassifierException as e:
+        #         obj.log.exception(e)
+        #         result = None
+        # if result:
+        #     result["fulltext_used"] = fulltext_used
+        #     # Check if it is not empty output before adding
+        #     if any(result.get("complete_output", {}).values()):
+        #         obj.extra_data["classifier_results"] = result
+        # if data_result:
+        #     extracted_keywords = get_value(
+        #         data_result, "complete_output.composite_keywords.keyword", []
+        #     ) + get_value(data_result, "complete_output.single_keywords.keyword", [])
+        #     obj.extra_data["extracted_keywords"] = extracted_keywords
+
         @task.branch_virtualenv(
             requirements=["inspire-schemas>=61.6.23", "boto3"],
             system_site_packages=False,
@@ -564,6 +647,9 @@ def hep_create_dag():
                 s3_workflow_id=s3_workflow_id,
             )
             >> populate_journal_coverage()
+            >> classify_paper(
+                only_core_tags=False, spires=True, with_author_keywords=True
+            )
             >> guess_coreness_task
             >> normalize_collaborations()
         )
