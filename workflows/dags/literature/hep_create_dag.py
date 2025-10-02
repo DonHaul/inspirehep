@@ -62,6 +62,7 @@ bucket_name = Variable.get("s3_bucket_name")
     params={
         "workflow_id": Param(type="string"),
     },
+    default_args={"arxiv_conn_id": "arxiv_connection"},
     start_date=datetime.datetime(2024, 5, 5),
     schedule=None,
     catchup=False,
@@ -464,6 +465,68 @@ def hep_create_dag():
                 return "preprocessing.arxiv_package_download"
             return "preprocessing.fetch_and_extract_journal_info"
 
+        def is_pdf_link(response):
+            """Return ``True`` if ``url`` points to a PDF.
+
+            Returns ``True`` if the first characters of the response contains
+            ``%PDF``.
+
+            Args:
+                url (string): a URL.
+
+            Returns:
+                bool: whether the url points to a PDF.
+
+            """
+            found = next(response.iter_content(10000), "").find("%PDF")
+
+            return found >= 0
+
+        @task
+        def populate_arxiv_document(arxiv_conn_id, **context):
+            workflow_id = context["params"]["workflow_id"]
+            workflow = read_object(s3_hook, bucket_name, workflow_id)
+
+            # TODO: replace with LiteratureReader(obj.data).arxiv_id
+            arxiv_id = get_value(workflow["data"], "arxiv_eprints.value[0]", default="")
+
+            arxiv_hook = GenericHttpHook(http_conn_id="arxiv_connection")
+
+            NO_PDF_ON_ARXIV = (
+                "The author has provided no source to generate PDF, and no PDF."
+            )
+
+            response = arxiv_hook.call_api(
+                endpoint=f"/pdf/{arxiv_id}",
+                extra_options={"stream": True, "allow_redirects": True},
+            )
+            response.raise_for_status()
+            is_valid_pdf_link = is_pdf_link(response)
+            if not is_valid_pdf_link:
+                response2 = arxiv_hook.call_api(endpoint=f"/pdf/{arxiv_id}")
+                response2.raise_for_status()
+                if NO_PDF_ON_ARXIV in response2.content:
+                    logger.info("No PDF is available for %s", arxiv_id)
+                    return
+
+            filename = secure_filename(f"{arxiv_id}.pdf")
+
+            key = f"{context['params']['workflow_id']}-documents/{filename}"
+            s3_hook.load_file(response.raw, key, bucket_name, replace=True)
+
+            # TODO
+            # lb = LiteratureBuilder(source="arxiv", record=workflow["data"])
+            # lb.add_document(
+            #     filename,
+            #     fulltext=True,
+            #     hidden=True,
+            #     material="preprint",
+            #     original_url=url,
+            #     url=url,
+            # )
+
+            # obj.data = lb.record
+
         @task
         def arxiv_plot_extract(tarball_key, **context):
             """Extract plots from an arXiv archive."""
@@ -544,11 +607,14 @@ def hep_create_dag():
         guess_coreness_task = guess_coreness()
 
         arxiv_package_download_task = arxiv_package_download()
+        populate_arxiv_document_task = populate_arxiv_document()
         arxiv_plot_extract_task = arxiv_plot_extract(arxiv_package_download_task)
         check_is_arxiv_paper_task >> [
             s3_workflow_id,
-            arxiv_package_download_task,
+            populate_arxiv_document_task,
         ]
+
+        populate_arxiv_document_task >> arxiv_package_download_task
 
         arxiv_plot_extract_task >> s3_workflow_id
         (
