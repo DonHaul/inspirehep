@@ -1,7 +1,11 @@
+import logging
+
 from hooks.inspirehep.inspire_http_hook import InspireHttpHook
 from inspire_utils.dedupers import dedupe_list
 from inspire_utils.record import get_value
 from invenio_classifier.reader import KeywordToken
+
+logger = logging.getLogger(__name__)
 
 
 def get_decision(decisions, action):
@@ -49,3 +53,28 @@ def clean_instances_from_data(output):
                 keywords[key.id] = keywords.pop(key)
         new_output[output_key] = keywords
     return new_output
+
+
+def get_document_key_in_workflow(workflow):
+    """Context manager giving the path to the document attached to a workflow object.
+    Arg:
+        obj: workflow object
+    Returns:
+        Optional[str]: The path to a local copy of the document.  If no
+        documents are present, it retuns None.  If several documents are
+        present, it prioritizes the fulltext. If several documents with the
+        same priority are present, it takes the first one and logs an error.
+    """
+    documents = workflow["data"].get("documents", [])
+    fulltexts = [document for document in documents if document.get("fulltext")]
+    documents = fulltexts or documents
+
+    if not documents:
+        logger.info("No document available")
+        return None
+    elif len(documents) > 1:
+        logger.error("More than one document in workflow, first one used")
+
+    key = documents[0]["key"]
+    logger.info('Using document with key "%s"', key)
+    return key

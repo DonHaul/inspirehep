@@ -512,6 +512,154 @@ class Test_HEPCreateDAG:
         assert "cnum" in pub_info[2]
 
 
+class TestClassifyPaper:
+    context = {
+        "dag_run": {"run_id": "test_run"},
+        "ti": {"xcom_push": lambda key, value: None},
+        "params": {"workflow_id": "00000000-0000-0000-0000-000000001111"},
+    }
+
+    def test_classify_paper_with_no_fulltext(self, datadir):
+        write_object(
+            s3_hook,
+            {
+                "data": {
+                    "titles": [
+                        {
+                            "title": "Some title",
+                        },
+                    ],
+                    "abstracts": [
+                        {"value": "Very interesting paper about the Higgs boson."},
+                    ],
+                }
+            },
+            bucket_name,
+            self.context["params"]["workflow_id"],
+            overwrite=True,
+        )
+
+        expected_kewords = [{"number": 1, "keyword": "Higgs particle"}]
+
+        expected_extracted_keywords = ["Higgs particle"]
+
+        params = {  # "taxonomy": higgs_ontology,
+            "only_core_tags": False,
+            "spires": True,
+            "with_author_keywords": True,
+            "no_cache": True,
+        }
+        self.context["params"]
+        params.update(self.context["params"])
+
+        result = task_test(
+            "hep_create_dag",
+            "preprocessing.classify_paper",
+            params=params,
+            dag_params=self.context["params"],
+        )
+
+        assert (
+            result["classifier_results"]["complete_output"]["core_keywords"]
+            == expected_kewords
+        )
+        assert result["extracted_keywords"] == expected_extracted_keywords
+        assert result["classifier_results"]["fulltext_used"] is False
+
+    def test_classify_paper_uses_keywords(get_document_in_workflow, higgs_ontology):
+        # data = {
+        #     "titles": [
+        #         {
+        #             "title": "Some title",
+        #         },
+        #     ],
+        #     "keywords": [
+        #         {
+        #             "value": "Higgs boson",
+        #         },
+        #     ],
+        # }
+
+        expected = [{"number": 1, "keyword": "Higgs particle"}]
+
+        result = task_test(
+            "hep_create_dag",
+            "preprocessing.classify_paper",
+            params={  # "taxonomy": higgs_ontology,
+                "only_core_tags": False,
+                "spires": True,
+                "with_author_keywords": True,
+                "no_cache": True,
+            },
+        )
+
+        assert (
+            result["classifier_results"]["complete_output"]["core_keywords"] == expected
+        )
+        assert result["classifier_results"]["fulltext_used"] is False
+
+    def test_classify_paper_does_not_raise_on_unprintable_keywords(
+        get_document_in_workflow, higgs_ontology
+    ):
+        # paper_with_unprintable_keywords = pkg_resources.resource_filename(
+        #     __name__, os.path.join("fixtures", "1802.08709.pdf")
+        # )
+
+        # get_document_in_workflow.return_value.__enter__.return_value = (
+        #     paper_with_unprintable_keywords
+        # )
+        get_document_in_workflow.return_value.__exit__.return_value = None
+
+        task_test(
+            "hep_create_dag",
+            "preprocessing.classify_paper",
+            params={  # "taxonomy": higgs_ontology,
+                "only_core_tags": False,
+                "spires": True,
+                "with_author_keywords": True,
+                "no_cache": True,
+            },
+        )
+
+    def test_classify_paper_with_fulltext_and_data(
+        get_document_in_workflow, tmpdir, higgs_ontology
+    ):
+        # data = {
+        #     "titles": [
+        #         {
+        #             "title": "Some title",
+        #         },
+        #     ],
+        #     "abstracts": [
+        #         {"value": "Very interesting paper about the Higgs boson."},
+        #     ],
+        # }
+        fulltext = tmpdir.join("fulltext.txt")
+        fulltext.write("Core Keyword")
+
+        expected_fulltext_keywords = [{"number": 1, "keyword": "Core Keyword"}]
+
+        expected_extracted_keywords = ["Higgs particle"]
+
+        result = task_test(
+            "hep_create_dag",
+            "preprocessing.classify_paper",
+            params={  # "taxonomy": higgs_ontology,
+                "only_core_tags": False,
+                "spires": True,
+                "with_author_keywords": True,
+                "no_cache": True,
+            },
+        )
+
+        assert (
+            result["classifier_results"]["complete_output"]["core_keywords"]
+            == expected_fulltext_keywords
+        )
+        assert result["classifier_results"]["fulltext_used"] is True
+        assert result["extracted_keywords"] == expected_extracted_keywords
+
+
 class TestNormalizeJournalTitles:
     """Test class for normalize_journal_titles function logic using Airflow task."""
 

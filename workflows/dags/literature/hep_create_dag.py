@@ -1,7 +1,7 @@
 import datetime
 import logging
 import os
-from tempfile import TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from airflow.decorators import dag, task_group
 from airflow.exceptions import AirflowException
@@ -34,9 +34,7 @@ from include.utils.s3 import read_object, write_object
 from inspire_utils.dedupers import dedupe_list
 from inspire_utils.helpers import maybe_int
 from inspire_utils.record import get_value
-from invenio_classifier import (
-    get_keywords_from_text,
-)
+from invenio_classifier import get_keywords_from_local_file, get_keywords_from_text
 from invenio_classifier.errors import ClassifierException
 from literature.exact_match_tasks import (
     await_decision_exact_match,
@@ -445,14 +443,15 @@ def hep_create_dag():
             with_author_keywords=False,
             extract_acronyms=False,
             only_core_tags=False,
-            fast_mode=False,
             **context,
         ):
             # only_core_tags=False,
             # spires=True,
             # with_author_keywords=True
 
-            workflow_data = read_object(s3_hook, bucket_name, s3_workflow_id)
+            workflow_id = context["params"]["workflow_id"]
+
+            workflow_data = read_object(s3_hook, bucket_name, workflow_id)
 
             params = dict(
                 taxonomy_name=taxonomy or Variable.get("HEP_ONTOLOGY_FILE"),
@@ -468,14 +467,17 @@ def hep_create_dag():
             )
 
             try:
-                data = get_value(workflow_data.data, "titles.title", [])
-                data.extend(get_value(workflow_data.data, "titles.subtitle", []))
-                data.extend(get_value(workflow_data.data, "abstracts.value", []))
-                data.extend(get_value(workflow_data.data, "keywords.value", []))
+                data = get_value(workflow_data, "data.titles.title", [])
+                data.extend(get_value(workflow_data, "data.titles.subtitle", []))
+                data.extend(get_value(workflow_data, "data.abstracts.value", []))
+                data.extend(get_value(workflow_data, "data.keywords.value", []))
                 if not data:
                     logger.error("No classification done due to missing data.")
                     data_result = None
                 else:
+                    import pdb
+
+                    pdb.set_trace()
                     data_result = get_keywords_from_text(data, **params)
                     if data_result:
                         data_result["complete_output"] = (
@@ -487,31 +489,39 @@ def hep_create_dag():
                 logger.exception(e)
                 data_result = None
 
-        # with get_document_in_workflow(obj) as tmp_document:
-        #     try:
-        #         if tmp_document:
-        #             result = get_keywords_from_local_file(tmp_document, **params)
-        #             fulltext_used = True
-        #             if result:
-        #                 result["complete_output"] = clean_instances_from_data(
-        #                     result.get("complete_output", {})
-        #                 )
-        #         else:
-        #             result = data_result
-        #             fulltext_used = False
-        #     except ClassifierException as e:
-        #         obj.log.exception(e)
-        #         result = None
-        # if result:
-        #     result["fulltext_used"] = fulltext_used
-        #     # Check if it is not empty output before adding
-        #     if any(result.get("complete_output", {}).values()):
-        #         obj.extra_data["classifier_results"] = result
-        # if data_result:
-        #     extracted_keywords = get_value(
-        #         data_result, "complete_output.composite_keywords.keyword", []
-        #     ) + get_value(data_result, "complete_output.single_keywords.keyword", [])
-        #     obj.extra_data["extracted_keywords"] = extracted_keywords
+            key = workflows.get_document_key_in_workflow(workflow_data)
+
+            if key:
+                # Create a named temporary file
+                with NamedTemporaryFile as tmpfile:
+                    try:
+                        s3_hook.download_file(
+                            f"{context['params']['workflow_id']}-documents/{key}",
+                            bucket_name,
+                            tmpfile,
+                        )
+
+                        if tmpfile:
+                            result = get_keywords_from_local_file(tmpfile, **params)
+                            fulltext_used = True
+                            if result:
+                                result["complete_output"] = (
+                                    workflows.clean_instances_from_data(
+                                        result.get("complete_output", {})
+                                    )
+                                )
+                        else:
+                            result = data_result
+                            fulltext_used = False
+                    except ClassifierException as e:
+                        logger.exception(e)
+                        result = None
+
+                if result:
+                    result["fulltext_used"] = fulltext_used
+                    # Check if it is not empty output before adding
+                    if any(result.get("complete_output", {}).values()):
+                        return result
 
         @task.branch_virtualenv(
             requirements=["inspire-schemas>=61.6.23", "boto3"],
@@ -648,7 +658,7 @@ def hep_create_dag():
             )
             >> populate_journal_coverage()
             >> classify_paper(
-                only_core_tags=False, spires=True, with_author_keywords=True
+                only_core_tags=False, spires=True, with_author_keywords=False
             )
             >> guess_coreness_task
             >> normalize_collaborations()
