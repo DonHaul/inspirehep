@@ -146,6 +146,7 @@ sentry-sdk = "1.19.1"
 django-allauth = {version = "65.0.1", extras = ["headless"]}
 inspire-schemas = "^61.6.26"
 inspire-utils = "^3.0.66"
+django-simple-history = "^3.10.1"
 
 [tool.poetry.dev-dependencies]
 factory-boy = "3.3.0"

@@ -107,6 +107,7 @@ THIRD_PARTY_APPS = [
     "django_elasticsearch_dsl_drf",
     "rest_framework_simplejwt",
     "django_json_widget",
+    "simple_history",
 ]
 
 LOCAL_APPS = [
@@ -175,6 +176,7 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",
+    "simple_history.middleware.HistoryRequestMiddleware",
 ]
 
 # STATIC

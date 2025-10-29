@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from backoffice.users.models import User
+from simple_history.models import HistoricalRecords
 
 
 class BaseWorkflowTicket(models.Model):
@@ -21,6 +22,10 @@ class BaseWorkflow(models.Model):
 
     _created_at = models.DateTimeField(auto_now_add=True)
     _updated_at = models.DateTimeField(auto_now=True)
+    history = HistoricalRecords(
+        inherit=True,
+        excluded_fields=["status", "_created_at", "_updated_at", "workflow_type"],
+    )
 
     class Meta:
         abstract = True

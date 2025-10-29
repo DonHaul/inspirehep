@@ -1,5 +1,4 @@
 from django.db import models
-
 from backoffice.hep.constants import (
     HEP_DECISION_CHOICES,
     HEP_DEFAULT_STATUS_CHOICE,
