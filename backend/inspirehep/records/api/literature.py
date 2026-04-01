@@ -433,7 +433,7 @@ class LiteratureRecord(
         """
         with app_context.app.app_context():
             result = {}
-            is_s3_or_public_url = current_s3_instance.is_s3_url_with_bucket_prefix(
+            is_s3_or_public_url = current_s3_instance.is_s3_url(
                 url
             ) or current_s3_instance.is_public_url(url)
             if is_s3_or_public_url and not current_app.config.get(
