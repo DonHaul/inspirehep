@@ -113,6 +113,10 @@ def create_s3_bucket(key):
     )
 
 
+def create_s3_bucket_with_name(bucket_name):
+    current_s3_instance.client.create_bucket(Bucket=bucket_name)
+
+
 def create_user_and_token(user_role="superuser"):
     """Test helper function to create user and authentication token."""
     return AccessTokenFactory(**{"role": user_role})
