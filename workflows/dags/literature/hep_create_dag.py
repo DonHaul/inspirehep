@@ -1487,6 +1487,7 @@ def hep_create_dag():
                     DECISION_HEP_REJECT,
                 ],
             )
+            logger.info("Got decision: %s", decision)
 
             action = decision.get("action") if decision else None
 
