@@ -3406,7 +3406,7 @@ class Test_HEPCreateDAG:
 
         assert (
             result == "halt_for_approval_if_new_or_reject_if_not_relevant."
-            "await_decision_approval"
+            "save_workflow_before_approval"
         )
 
     def test_is_record_relevant_full_journal_coverage(self):
@@ -3430,7 +3430,7 @@ class Test_HEPCreateDAG:
 
         assert (
             result == "halt_for_approval_if_new_or_reject_if_not_relevant."
-            "await_decision_approval"
+            "save_workflow_before_approval"
         )
 
     def test_is_record_relevant_auto_approved(self):
@@ -3455,7 +3455,7 @@ class Test_HEPCreateDAG:
 
         assert (
             result == "halt_for_approval_if_new_or_reject_if_not_relevant."
-            "await_decision_approval"
+            "save_workflow_before_approval"
         )
 
     @pytest.mark.vcr
@@ -3527,7 +3527,7 @@ class Test_HEPCreateDAG:
 
         assert (
             result == "halt_for_approval_if_new_or_reject_if_not_relevant."
-            "await_decision_approval"
+            "save_workflow_before_approval"
         )
 
     def test_is_record_relevant_missing_classification_results(self):
@@ -3552,7 +3552,7 @@ class Test_HEPCreateDAG:
 
         assert (
             result == "halt_for_approval_if_new_or_reject_if_not_relevant."
-            "await_decision_approval"
+            "save_workflow_before_approval"
         )
 
     def test_is_record_relevant_non_rejected_decision(self):
@@ -3586,7 +3586,7 @@ class Test_HEPCreateDAG:
 
         assert (
             result == "halt_for_approval_if_new_or_reject_if_not_relevant."
-            "await_decision_approval"
+            "save_workflow_before_approval"
         )
 
     @patch(
