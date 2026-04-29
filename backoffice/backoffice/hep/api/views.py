@@ -1,5 +1,6 @@
 import logging
 
+from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -113,6 +114,13 @@ class HepWorkflowViewSet(BaseWorkflowViewSet):
     resolution_serializer = HepResolutionSerializer
     status_choices = HepStatusChoices
     schema_name = "hep"
+
+    @classmethod
+    def as_view(cls, actions=None, **initkwargs):
+        view = super().as_view(actions=actions, **initkwargs)
+        if actions == {"post": "batch_resolve"}:
+            return transaction.non_atomic_requests(view)
+        return view
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
