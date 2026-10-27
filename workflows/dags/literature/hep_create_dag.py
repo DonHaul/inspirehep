@@ -155,7 +155,7 @@ def hep_create_dag():
     arxiv_hook = GenericHttpHook(http_conn_id="arxiv_connection")
     s3_store = s3.S3JsonStore(aws_conn_id="s3_conn")
 
-    @task(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
+    @task(trigger_rule=TriggerRule.ONE_SUCCESS)
     def save_and_complete_workflow(**context):
         workflow_id = context["params"]["workflow_id"]
         workflow_data = s3_store.read_workflow(workflow_id)
@@ -230,11 +230,9 @@ def hep_create_dag():
                 workflow_id=workflow_id,
                 decision_data={"action": DECISION_DISCARD},
             )
-            workflow_management_hook.set_workflow_status(
-                status_name=STATUS_COMPLETED,
-                workflow_id=workflow_id,
-            )
-            return "run_next_if_necessary"
+            workflow_data["status"] = STATUS_COMPLETED
+            workflow_management_hook.update_workflow(workflow_id, workflow_data)
+            return "save_and_complete_workflow"
 
         return "check_for_blocking_workflows"
 
@@ -2044,10 +2042,29 @@ def hep_create_dag():
                 match["id"], f"Blocked by workflow {older_workflow['id']}"
             )
 
+    @task
+    def early_mark_run_as_completed(**context):
+        workflow_id = context["params"]["workflow_id"]
+        workflow_data = workflow_management_hook.get_workflow(workflow_id)
+
+        decision = get_decision(
+            workflow_data.get("decisions"), [DECISION_AUTO_REJECT, DECISION_DISCARD]
+        )
+        if not decision:
+            return
+
+        logger.info(
+            "Workflow has %s decision, marking run as completed.", decision["action"]
+        )
+        workflow_management_hook.complete_workflow(
+            workflow_id, note=f"Completed early due to {decision['action']} decision"
+        )
+
     preprocessing_group = preprocessing()
     check_for_fuzzy_matches_task = check_for_fuzzy_matches()
     check_for_exact_matches_task = check_for_exact_matches()
     check_auto_approve_task = check_auto_approve()
+    check_if_previously_rejected_task = check_if_previously_rejected()
     stop_if_existing_submission_notify_and_close_task = (
         stop_if_existing_submission_notify_and_close()
     )
@@ -2066,10 +2083,11 @@ def hep_create_dag():
         >> stop_if_existing_submission_notify_and_close_task
         >> [check_auto_approve_task, save_and_complete_workflow_task]
     )
+
     (
         check_auto_approve_task
-        >> check_if_previously_rejected()
-        >> [preprocessing_group, save_and_complete_workflow_task]
+        >> check_if_previously_rejected_task
+        >> [save_and_complete_workflow_task, preprocessing_group]
     )
 
     (
@@ -2095,7 +2113,7 @@ def hep_create_dag():
         >> notify_if_submission()
         >> set_workflow_status_to_running()
         >> discard_older_wfs_w_same_source()
-        >> [check_for_blocking_workflows_task, run_next_if_necessary_task]
+        >> [check_for_blocking_workflows_task, save_and_complete_workflow_task]
     )
 
     check_for_blocking_workflows_task >> check_for_exact_matches_task
@@ -2106,6 +2124,7 @@ def hep_create_dag():
 
     (
         preprocessing_group
+        >> notify_if_submission()
         >> halt_for_approval_if_new_or_reject_if_not_relevant()
         >> is_record_accepted()
         >> [postprocessing_group, notify_and_close_not_accepted_task]
@@ -2122,6 +2141,7 @@ def hep_create_dag():
         >> core_selection()
         >> save_and_complete_workflow_task
         >> run_next_if_necessary_task
+        >> early_mark_run_as_completed()
     )
     notify_and_close_not_accepted_task >> save_and_complete_workflow_task
     should_proceed_to_core_selection_task >> save_and_complete_workflow_task
