@@ -234,11 +234,11 @@ class Test_HEPCreateDAG:
         ],
     )
     @patch(
-        "hooks.backoffice.workflow_management_hook.WorkflowManagementHook.update_workflow"
+        "hooks.backoffice.workflow_management_hook.WorkflowManagementHook.set_workflow_status"
     )
     @pytest.mark.vcr
     def test_discard_older_wfs_w_same_source_discard_self(
-        self, mock_update_workflow, mock_find_matching_workflows
+        self, mock_set_workflow_status, mock_find_matching_workflows
     ):
         self.s3_store.write_workflow(
             {
@@ -261,13 +261,13 @@ class Test_HEPCreateDAG:
         )
 
         result = task_test(self.dag, "discard_older_wfs_w_same_source", self.context)
-        assert result == "save_and_complete_workflow"
+        assert result == "run_next_if_necessary_discarded"
         workflow_result = self.wf_hook.get_workflow(self.workflow_id)
 
         assert workflows.get_decision(workflow_result["decisions"], DECISION_DISCARD)
-        mock_update_workflow.assert_called_once()
-        assert mock_update_workflow.call_args.args[0] == self.workflow_id
-        assert mock_update_workflow.call_args.args[1]["status"] == STATUS_COMPLETED
+        mock_set_workflow_status.assert_called_once_with(
+            status_name=STATUS_COMPLETED, workflow_id=self.workflow_id
+        )
 
     @patch(
         "include.utils.opensearch.find_matching_workflows",
@@ -874,7 +874,7 @@ class Test_HEPCreateDAG:
             context_params=context_params,
         )
 
-        assert result == "save_and_complete_workflow"
+        assert result == "save_and_complete_workflow_existing_submission"
 
     @pytest.mark.vcr
     def test_normalize_collaborations(self):
@@ -2710,7 +2710,7 @@ class Test_HEPCreateDAG:
             self.dag, "preprocessing.check_guess_coreness_rejection", self.context
         )
 
-        assert result == "save_and_complete_workflow"
+        assert result == "save_and_complete_workflow_coreness_rejected"
         mock_add_decision.assert_called_once_with(
             workflow_id=self.workflow_id,
             decision_data={"action": DECISION_AUTO_REJECT},

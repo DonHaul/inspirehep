@@ -79,12 +79,6 @@ def add_hep_decision(workflow_id, user, action, value=None):
 
 
 def resolve_workflow(id, data, user):
-    logger.info(
-        "Restarting HEP DAG Run %s after choice: %s",
-        id,
-        data["action"],
-    )
-
     add_hep_decision(
         id,
         user,
@@ -94,12 +88,17 @@ def resolve_workflow(id, data, user):
     workflow = get_object_or_404(HepWorkflow, pk=id)
     task_to_restart = HepResolutions[data["action"]].label
     if task_to_restart:
+        logger.info(
+            "Restarting HEP DAG Run %s after choice: %s",
+            id,
+            data["action"],
+        )
         _, status = airflow_utils.clear_airflow_dag_tasks(
             WORKFLOW_DAGS[workflow.workflow_type].initialize,
             id,
             tasks=[task_to_restart],
         )
-    workflow.status = HepStatusChoices.RUNNING
+        workflow.status = HepStatusChoices.RUNNING
     workflow.save()
     return workflow
 
