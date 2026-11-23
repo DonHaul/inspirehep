@@ -1,4 +1,4 @@
-FROM registry.cern.ch/cern-sis/base-images/python:3.11.16-slim AS python
+FROM registry.cern.ch/cern-sis/base-images/python:3.13.18-slim AS python
 
 ARG APP_HOME=/app
 WORKDIR ${APP_HOME}
